@@ -39,7 +39,7 @@ __TRANSACTIONS__
 Find every recurring subscription (also clear annual plans that appear only once).
 Return ONLY a JSON array. Each element must have exactly these keys:
 - "name": clean merchant name (e.g. 'POS DEBIT AWS SERVICES SEATTLE WA' -> 'AWS Cloud')
-- "frequency": one of __FREQUENCIES__
+- "frequency": one of __FREQUENCIES__ (measure the day gap between consecutive transactions, prioritizing the most recent intervals: ~14 days = 'bi-weekly', ~30 days = 'monthly', ~90 days = 'quarterly', ~365 days = 'annual')
 - "category": one of __CATEGORIES__
 - "payment_mechanism": e.g. 'Card recurring', 'UPI Autopay', 'e-Mandate'
 - "cancellation_steps": at most 3 short steps, one line each, to cancel or turn off auto-renew
@@ -113,6 +113,12 @@ def build_commitments(llm_items, txs):
 
         frequency = item.get("frequency")
         category = item.get("category")
+        if len(history) >= 3:
+            from datetime import date
+            dates = [date.fromisoformat(h["date"][:10]) for h in history]
+            recent_gaps = [(dates[i] - dates[i - 1]).days for i in range(max(1, len(dates) - 3), len(dates))]
+            if 10 <= (sum(recent_gaps) / len(recent_gaps)) <= 18:
+                frequency = "bi-weekly"
         commitments.append({
             "id": slug,
             "name": name,
