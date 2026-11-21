@@ -176,7 +176,7 @@ const fmt = d => { const t = new Date(d+'T00:00:00Z'); return isNaN(t) ? d : t.t
 const PER_YEAR = {monthly:12,quarterly:4,annual:1,'bi-weekly':26};
 const MONTHS = {monthly:1,quarterly:3,annual:12};
 const TABS = [['dashboard','Dashboard','Overview'],['transactions','Transactions','Transactions'],['alerts','Alerts & Insights','Alerts & Insights']];
-const SOURCES = {gemini:'Live analysis',cache:'Saved analysis',sample:'Sample data'};
+const SOURCES = {neo4j:'Neo4j graph','gemini+neo4j':'Gemini + Neo4j',gemini:'Live analysis',cache:'Saved analysis',sample:'Sample data'};
 const DEFAULT_STEPS = n => [`Log into your ${n} account on their official website or app.`,'Navigate to Account Settings or Subscription & Billing.',"Select your active plan and click 'Cancel Subscription' or 'Disable Auto-Renew'.",'Save the cancellation confirmation receipt for your records.'];
 
 const S = {
