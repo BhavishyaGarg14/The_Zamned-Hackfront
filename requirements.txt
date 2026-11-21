@@ -4,4 +4,4 @@ psycopg2-binary
 python-dotenv
 google-genai
 tenacity
-
+neo4j
