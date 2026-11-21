@@ -40,12 +40,13 @@ h1{font-size:1.375rem;color:var(--navy)}
 .pill:hover{background:var(--navhov)}
 .pill[disabled]{opacity:.6;cursor:wait}
 #gsearch{width:220px;height:40px;border:0;border-radius:20px;background:var(--soft);padding:0 16px;font-size:.75rem}
-.circ{width:40px;height:40px;border-radius:50%;background:var(--soft);display:grid;place-items:center;position:relative;font-size:1rem;overflow:hidden}
+.circ{width:40px;height:40px;border-radius:50%;background:var(--soft);display:grid;place-items:center;position:relative;font-size:1rem}
 .circ:hover{background:var(--navhov)}
 .circ img,.avatar{width:20px;height:20px}
 .avatar{width:40px;height:40px;border-radius:50%;object-fit:cover;display:grid;place-items:center;background:var(--soft)}
 .bell{background:var(--bellbg)}
-#bellN{position:absolute;top:-2px;right:-2px;background:#FF4D4F;color:#fff;font-size:.625rem;font-weight:700;min-width:16px;height:16px;border-radius:8px;display:grid;place-items:center;padding:0 4px}
+#bellN{position:absolute;top:-3px;right:-3px;z-index:2;background:#FF4D4F;color:#fff;font-size:.625rem;font-weight:700;min-width:18px;height:18px;border-radius:9px;border:2px solid var(--card);display:grid;place-items:center;padding:0 4px;line-height:1}
+#bellN[hidden]{display:none}
 main{padding:20px 25px 40px}
 .kick{font-size:.6875rem;font-weight:700;color:var(--faint);letter-spacing:.06em}
 h2{font-size:1.625rem;margin:2px 0}
@@ -365,7 +366,7 @@ function renderCharts(d){
       labels: cats,
       datasets: [{
         data: vals,
-        backgroundColor: '#1E293B',
+        backgroundColor: isDark() ? '#38BDF8' : '#1E293B',
         borderRadius: 6,
         barThickness: 18
       }]
@@ -377,10 +378,10 @@ function renderCharts(d){
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: '#FFFFFF',
-          titleColor: '#0F172A',
-          bodyColor: '#0F172A',
-          borderColor: '#CBD5E1',
+          backgroundColor: isDark() ? '#0F172A' : '#FFFFFF',
+          titleColor: isDark() ? '#F8FAFC' : '#0F172A',
+          bodyColor: isDark() ? '#F8FAFC' : '#0F172A',
+          borderColor: isDark() ? '#475569' : '#CBD5E1',
           borderWidth: 1,
           padding: 10,
           displayColors: false,
@@ -394,7 +395,7 @@ function renderCharts(d){
         y: {
           border: { display: false },
           grid: { display: false },
-          ticks: { color: '#475569', font: { size: 12 } }
+          ticks: { color: isDark() ? '#CBD5E1' : '#475569', font: { size: 12 } }
         }
       }
     }
