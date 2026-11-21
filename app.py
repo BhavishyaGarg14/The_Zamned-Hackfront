@@ -17,6 +17,8 @@ app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_credentials
 app.include_router(analysis.router)
 # from routers import notifications        # <- teammates add their routers here
 # app.include_router(notifications.router)
+from routers import graph
+app.include_router(graph.router)
 
 # Keep this LAST. Local only: on Vercel the CDN serves public/ itself.
 PUBLIC_DIR = Path(__file__).parent / "public"
