@@ -53,7 +53,7 @@ def _try_gemini():
     if not fresh:
         return False
 
-    _set(fresh, "gemini")
+    _set(fresh, getattr(get_commitments_from_gemini, "last_engine", "gemini"))
     CACHE_FILE.write_text(json.dumps(fresh, ensure_ascii=False), encoding="utf-8")
     for callback in _listeners:
         try:
