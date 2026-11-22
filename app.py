@@ -14,7 +14,8 @@ app = FastAPI(title="The Missing Rupee API")
 app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_credentials=False,
                    allow_methods=["*"], allow_headers=["*"])
 
-from routers import analysis, upload
+from routers import analysis, auth, upload
+app.include_router(auth.router)
 app.include_router(analysis.router)
 app.include_router(upload.router)
 # from routers import notifications        # <- teammates add their routers here
