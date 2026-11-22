@@ -145,6 +145,7 @@ h2{font-size:1.625rem;margin:2px 0}
       <input id="gsearch" type="search" placeholder="Search for something" aria-label="Search merchants">
       <button class="circ" id="settings" title="Settings" aria-label="Settings"></button>
       <button class="circ bell" id="bell" title="Alerts" aria-label="Alerts"></button>
+      <button class="pill" id="authBtn" title="Sign in or out">Sign in</button>
       <span class="avatar" id="profileSlot" aria-label="Profile"></span>
     </div>
   </header>
@@ -185,7 +186,9 @@ const S = {
   data:null, q:'', cat:'All categories', freq:'All frequencies', range:'6m',
   theme: localStorage.getItem('tmr_theme') || 'Light',
   scale: localStorage.getItem('tmr_scale') || '100%',
-  error:false, loading:false
+  error:false, loading:false,
+  token: localStorage.getItem('tmr_token') || '',
+  user: localStorage.getItem('tmr_user') || ''
 };
 
 const annualCost = c => c.amount * (PER_YEAR[c.frequency] ?? 12);
@@ -205,14 +208,26 @@ function alertChange(a){
 const ALERT_TITLE = {price_hike:a=>`${a.merchant} price increased`,trial_converted:()=>'Free trial converted',new:()=>'New recurring payment started',frequency_increased:()=>'Billing frequency increased'};
 
 /* ---------- data ---------- */
-async function load(refresh=false){
+async function apiFetch(url, opts = {}) {
+  const headers = { ...(opts.headers || {}) };
+  if (S.token) headers.Authorization = `Bearer ${S.token}`;
+  const r = await fetch(url, { ...opts, headers });
+  if (r.status === 401) {
+    signOut(true);
+    throw new Error('Please log in to continue.');
+  }
+  return r;
+}
+
+async function load(refresh = false) {
+  if (!S.token) { openAuthModal(); return; }
   S.loading = true; S.error = false; paintChrome(); if (!S.data) paint();
-  const ctl = new AbortController(); const timer = setTimeout(()=>ctl.abort(), 90000);
-  try{
-    const r = await fetch('/api/analysis'+(refresh?'?refresh=true':''),{signal:ctl.signal});
+  const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 90000);
+  try {
+    const r = await apiFetch('/api/analysis' + (refresh ? '?refresh=true' : ''), { signal: ctl.signal });
     if (!r.ok) throw new Error(r.status);
     S.data = await r.json();
-  }catch(e){ S.error = true; }
+  } catch (e) { if (S.token) S.error = true; }
   clearTimeout(timer); S.loading = false; paintChrome(); paint();
 }
 
@@ -479,7 +494,7 @@ $('#pdfInput').onchange = async e => {
   try {
     const fd = new FormData();
     fd.append('file', file);
-    const r = await fetch('/api/upload', { method: 'POST', body: fd });
+    const r = await apiFetch('/api/upload', { method: 'POST', body: fd });
     const data = await r.json();
     if (!r.ok) throw new Error(data.detail || 'Upload failed');
     await load(false); // Store was already refreshed on the server; pull updated analysis
@@ -541,16 +556,101 @@ function openSettings(){
 
 $('#settings').onclick = openSettings;
 $('#modal').onclick = e => {
-  if (e.target.id === 'modal' || e.target.id === 'mClose') { $('#modal').hidden = true; return; }
+  if (e.target.id === 'modal' || e.target.id === 'mClose') {
+    if (S.token) $('#modal').hidden = true;
+    else if (!e.target.closest('#authForm')) openAuthModal();
+    return;
+  }
   const t = e.target.closest('[data-theme]');
-  if (t) { S.theme = t.dataset.theme; localStorage.setItem('tmr_theme', S.theme); applyPrefs(); openSettings(); }
+  if (t) { S.theme = t.dataset.theme; localStorage.setItem('tmr_theme', S.theme); applyPrefs(); openSettings(); return; }
   const sc = e.target.closest('[data-scale]');
-  if (sc) { S.scale = sc.dataset.scale; localStorage.setItem('tmr_scale', S.scale); applyPrefs(); openSettings(); }
+  if (sc) { S.scale = sc.dataset.scale; localStorage.setItem('tmr_scale', S.scale); applyPrefs(); openSettings(); return; }
 };
-addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#modal').hidden) $('#modal').hidden = true; });
+addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !$('#modal').hidden) {
+    if (S.token) $('#modal').hidden = true;
+    else if (!$('#authForm')) openAuthModal();
+  }
+});
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (S.theme === 'System') applyPrefs(); });
 
 applyPrefs();
+
+function syncUserPill() {
+  const b = $('#authBtn');
+  if (!b) return;
+  b.hidden = false;
+  if (S.user) {
+    b.textContent = `${S.user} · Sign out`;
+    b.style.background = '';
+    b.style.color = '';
+  } else {
+    b.textContent = 'Sign in';
+    b.style.background = '#1814F3';
+    b.style.color = '#fff';
+  }
+}
+
+function signOut(showModal = true) {
+  S.token = ''; S.user = ''; S.data = null;
+  localStorage.removeItem('tmr_token');
+  localStorage.removeItem('tmr_user');
+  syncUserPill();
+  if (showModal) openAuthModal();
+}
+
+function openAuthModal(mode = 'login', errMsg = '') {
+  const m = $('#modal');
+  m.hidden = false;
+  m.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-label="Sign in">
+    <div class="mhead"><h3>${mode === 'login' ? 'Sign in to The Missing Rupee' : 'Create your account'}</h3></div>
+    <p class="sub" style="margin:0 0 12px">Your bank statements stay isolated under your account.</p>
+    <form id="authForm" class="mcard" style="display:grid;gap:10px">
+      <input id="authUser" type="text" placeholder="Username (3+ chars)" required minlength="3"
+             style="height:38px;border:1px solid var(--border);border-radius:10px;padding:0 12px;background:var(--card)">
+      <input id="authPass" type="password" placeholder="Password (6+ chars)" required minlength="6"
+             style="height:38px;border:1px solid var(--border);border-radius:10px;padding:0 12px;background:var(--card)">
+      ${errMsg ? `<div style="color:#DC2626;font-size:.75rem">${esc(errMsg)}</div>` : ''}
+      <button type="submit" class="pill" style="background:#1814F3;color:#fff;width:100%">
+        ${mode === 'login' ? 'Sign In' : 'Create Account'}
+      </button>
+      <button type="button" id="switchAuth" style="font-size:.75rem;color:var(--mute);margin-top:4px">
+        ${mode === 'login' ? "Don't have an account? Register" : 'Already have an account? Sign in'}
+      </button>
+    </form>
+  </div>`;
+  m.querySelector('.modal').onclick = e => e.stopPropagation();
+  $('#switchAuth').onclick = () => openAuthModal(mode === 'login' ? 'register' : 'login');
+  $('#authForm').onsubmit = async e => {
+    e.preventDefault();
+    const username = $('#authUser').value.trim();
+    const password = $('#authPass').value;
+    try {
+      const r = await fetch(`/api/auth/${mode}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      const out = await r.json();
+      if (!r.ok) { openAuthModal(mode, out.detail || 'Authentication failed'); return; }
+      S.token = out.token; S.user = out.username;
+      localStorage.setItem('tmr_token', S.token);
+      localStorage.setItem('tmr_user', S.user);
+      $('#modal').hidden = true;
+      syncUserPill();
+      load(false);
+    } catch {
+      openAuthModal(mode, 'Network error. Check that the server is running.');
+    }
+  };
+}
+
+$('#authBtn').onclick = () => {
+  if (S.token) signOut(true);
+  else openAuthModal('login');
+};
+
+syncUserPill();
 
 paintChrome(); load();
 </script>
