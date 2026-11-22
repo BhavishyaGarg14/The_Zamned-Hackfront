@@ -1,25 +1,11 @@
-"""Turns raw bank debits into recurring "commitments" using Gemini.
-
-Key idea: Gemini only GROUPS transactions (it returns transaction ids). We build the payment
-history ourselves from the real database rows, so amounts and dates can never be invented.
-
-Public function:  get_commitments_from_gemini() -> list[dict]
-Commitment shape (see README "Data contract"):
-    id, name, frequency, category, amount (number), date, initial, bg,
-    payment_mechanism, cancellation_steps[], history[{date, description, amount}]
-"""
 import json
 import logging
 import re
-
 from google import genai
 from google.genai import errors, types
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
-
 from config import GEMINI_API_KEY, GEMINI_MODEL
 from neo4j_graph import fetch_debits, resolve_known_txs, sync_commitments_to_graph
-
-from neo4j_graph import resolve_known_txs, sync_commitments_to_graph
 
 log = logging.getLogger(__name__)
 
@@ -41,18 +27,16 @@ __TRANSACTIONS__
 Find every recurring subscription (also clear annual plans that appear only once).
 Return ONLY a JSON array. Each element must have exactly these keys:
 - "name": clean merchant name (e.g. 'POS DEBIT AWS SERVICES SEATTLE WA' -> 'AWS Cloud')
-- "frequency": one of __FREQUENCIES__ (measure the day gap between consecutive transactions, prioritizing the most recent intervals: ~14 days = 'bi-weekly', ~30 days = 'monthly', ~90 days = 'quarterly', ~365 days = 'annual')
+- "frequency": one of __FREQUENCIES__
 - "category": one of __CATEGORIES__
 - "payment_mechanism": e.g. 'Card recurring', 'UPI Autopay', 'e-Mandate'
-- "cancellation_steps": at most 3 short steps, one line each, to cancel or turn off auto-renew
+- "cancellation_steps": array of short, merchant-specific steps to cancel or turn off auto-renew
 - "transaction_ids": array with the id of EVERY transaction above that belongs to this subscription
 
 Rules: use only ids that appear above. Never invent transactions. Skip one-off purchases."""
 
 
-# ---------------------------------------------------------------- Gemini call (with retries)
 def _is_retryable(exc):
-    """Retry only when waiting can help: Google server errors and rate limits (429)."""
     return isinstance(exc, errors.ServerError) or (
         isinstance(exc, errors.APIError) and exc.code == 429
     )
@@ -75,20 +59,11 @@ def _call_gemini(client, prompt):
     )
 
 
-# ---------------------------------------------------------------- turning Gemini output into commitments
 def _slug(name):
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "merchant"
 
 
-def _to_int(value):
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
 def build_commitments(llm_items, txs):
-    """Combine Gemini's grouping with the real transaction rows. Pure function (easy to test)."""
     by_id = {str(t["id"]): t for t in txs}
     used_slugs = set()
     commitments = []
@@ -99,7 +74,7 @@ def build_commitments(llm_items, txs):
 
         raw_ids = item.get("transaction_ids") or []
         ids = {str(i).strip() for i in raw_ids if str(i).strip() in by_id}
-        if not ids:  # Gemini invented a merchant with no real transactions -> drop it
+        if not ids:
             continue
 
         history = sorted((by_id[i] for i in ids), key=lambda t: t["date"])
@@ -115,12 +90,6 @@ def build_commitments(llm_items, txs):
 
         frequency = item.get("frequency")
         category = item.get("category")
-        if len(history) >= 3:
-            from datetime import date
-            dates = [date.fromisoformat(h["date"][:10]) for h in history]
-            recent_gaps = [(dates[i] - dates[i - 1]).days for i in range(max(1, len(dates) - 3), len(dates))]
-            if 10 <= (sum(recent_gaps) / len(recent_gaps)) <= 18:
-                frequency = "bi-weekly"
         commitments.append({
             "id": slug,
             "name": name,
@@ -140,19 +109,16 @@ def build_commitments(llm_items, txs):
     return commitments
 
 
-# ---------------------------------------------------------------- public entry point
-def get_commitments_from_gemini():
-    """DB -> Neo4j alias cache -> Gemini (for unseen rows only) -> Neo4j graph sync."""
-    txs = fetch_debits()
+def get_commitments_from_gemini(username: str):
+    """Fetch user's debits -> Neo4j shared alias cache -> Gemini (unseen only) -> Neo4j sync."""
+    txs = fetch_debits(username)
     if not txs:
-        log.warning("No debit transactions found in the 'transactions' table.")
+        get_commitments_from_gemini.last_engine = "neo4j"
         return []
 
-    # 1. Offload known descriptors to Neo4j so Gemini only classifies unseen strings
     known_items, unknown_txs = resolve_known_txs(txs)
     llm_items = list(known_items)
 
-    # 2. Only call Gemini if there are brand-new, unrecognized transactions
     if unknown_txs:
         prompt = (
             PROMPT.replace("__TRANSACTIONS__", json.dumps(unknown_txs, ensure_ascii=False, separators=(",", ":")))
@@ -172,7 +138,6 @@ def get_commitments_from_gemini():
             fresh_items = next((v for v in fresh_items.values() if isinstance(v, list)), [])
         llm_items.extend(fresh_items)
 
-    # 3. Merge items by merchant name in case a known merchant had a new alias
     merged = {}
     for item in llm_items:
         if not isinstance(item, dict) or not item.get("name"):
@@ -184,9 +149,6 @@ def get_commitments_from_gemini():
             merged[key]["transaction_ids"].extend(item.get("transaction_ids") or [])
 
     commitments = build_commitments(list(merged.values()), txs)
-
-    # 4. Sync updated chains & NEXT_CHARGE edge metrics back into Neo4j
-    sync_commitments_to_graph(commitments, txs)
-    log.info("Resolved %d recurring commitments (%d unseen debits sent to Gemini).", len(commitments), len(unknown_txs))
+    sync_commitments_to_graph(commitments, txs, username)
     get_commitments_from_gemini.last_engine = "gemini+neo4j" if unknown_txs else "neo4j"
     return commitments
