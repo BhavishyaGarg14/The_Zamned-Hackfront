@@ -17,7 +17,9 @@ from google.genai import errors, types
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from config import GEMINI_API_KEY, GEMINI_MODEL
-from db import fetch_debits
+from neo4j_graph import fetch_debits, resolve_known_txs, sync_commitments_to_graph
+
+from neo4j_graph import resolve_known_txs, sync_commitments_to_graph
 
 log = logging.getLogger(__name__)
 
@@ -140,32 +142,51 @@ def build_commitments(llm_items, txs):
 
 # ---------------------------------------------------------------- public entry point
 def get_commitments_from_gemini():
-    """DB -> Gemini -> list of commitments. Raises on DB/API failure; returns [] if nothing found."""
+    """DB -> Neo4j alias cache -> Gemini (for unseen rows only) -> Neo4j graph sync."""
     txs = fetch_debits()
-    txs = txs[-300:]  # most recent 300 debits keeps the request fast
     if not txs:
         log.warning("No debit transactions found in the 'transactions' table.")
         return []
 
-    prompt = (
-        PROMPT.replace("__TRANSACTIONS__", "\n".join(f'{t["id"]}|{t["date"]}|{t["description"]}|{t["amount"]}' for t in txs))
-        .replace("__FREQUENCIES__", json.dumps(FREQUENCIES))
-        .replace("__CATEGORIES__", json.dumps(CATEGORIES))
-    )
+    # 1. Offload known descriptors to Neo4j so Gemini only classifies unseen strings
+    known_items, unknown_txs = resolve_known_txs(txs)
+    llm_items = list(known_items)
 
-    client = genai.Client(api_key=GEMINI_API_KEY, http_options=types.HttpOptions(timeout=120_000))
-    response = _call_gemini(client, prompt)
-    log.info("Gemini raw reply (first 800 chars): %s", (response.text or "")[:800])
+    # 2. Only call Gemini if there are brand-new, unrecognized transactions
+    if unknown_txs:
+        prompt = (
+            PROMPT.replace("__TRANSACTIONS__", json.dumps(unknown_txs, ensure_ascii=False, separators=(",", ":")))
+            .replace("__FREQUENCIES__", json.dumps(FREQUENCIES))
+            .replace("__CATEGORIES__", json.dumps(CATEGORIES))
+        )
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        response = _call_gemini(client, prompt)
 
-    try:
-        llm_items = json.loads(response.text)
-    except (json.JSONDecodeError, TypeError):
-        log.error("Gemini returned invalid JSON: %s", (response.text or "")[:500])
-        return []
+        try:
+            fresh_items = json.loads(response.text)
+        except (json.JSONDecodeError, TypeError):
+            log.error("Gemini returned invalid JSON: %s", (response.text or "")[:500])
+            fresh_items = []
 
-    if isinstance(llm_items, dict):  # model wrapped the list in an object
-        llm_items = next((v for v in llm_items.values() if isinstance(v, list)), [])
+        if isinstance(fresh_items, dict):
+            fresh_items = next((v for v in fresh_items.values() if isinstance(v, list)), [])
+        llm_items.extend(fresh_items)
 
-    commitments = build_commitments(llm_items, txs)
-    log.info("Gemini found %d recurring commitments from %d debits.", len(commitments), len(txs))
+    # 3. Merge items by merchant name in case a known merchant had a new alias
+    merged = {}
+    for item in llm_items:
+        if not isinstance(item, dict) or not item.get("name"):
+            continue
+        key = item["name"].strip().lower()
+        if key not in merged:
+            merged[key] = dict(item, transaction_ids=list(item.get("transaction_ids") or []))
+        else:
+            merged[key]["transaction_ids"].extend(item.get("transaction_ids") or [])
+
+    commitments = build_commitments(list(merged.values()), txs)
+
+    # 4. Sync updated chains & NEXT_CHARGE edge metrics back into Neo4j
+    sync_commitments_to_graph(commitments, txs)
+    log.info("Resolved %d recurring commitments (%d unseen debits sent to Gemini).", len(commitments), len(unknown_txs))
+    get_commitments_from_gemini.last_engine = "gemini+neo4j" if unknown_txs else "neo4j"
     return commitments
