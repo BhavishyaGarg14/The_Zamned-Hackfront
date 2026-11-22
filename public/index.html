@@ -185,7 +185,7 @@ const DEFAULT_STEPS = n => [`Log into your ${n} account on their official websit
 const S = {
   data:null, q:'', cat:'All categories', freq:'All frequencies', range:'6m',
   theme: localStorage.getItem('tmr_theme') || 'Light',
-  scale: localStorage.getItem('tmr_scale') || '100%',
+ 
   error:false, loading:false,
   token: localStorage.getItem('tmr_token') || '',
   user: localStorage.getItem('tmr_user') || ''
@@ -526,30 +526,26 @@ function paintStaticIcons() {
 
 function applyPrefs() {
   document.documentElement.dataset.theme = isDark() ? 'dark' : 'light';
-  document.documentElement.style.setProperty('--fs', (parseInt(S.scale, 10) || 100) / 100);
+  
   paintStaticIcons();
   if (S.data) paint();
 }
 
 function openSettings(){
   const themes = ['Light', 'Dark', 'System'];
-  const scales = ['80%', '90%', '100%', '110%', '120%'];
+  
   const m = $('#modal');
   m.hidden = false;
   m.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-label="Preferences">
     <div class="mhead"><h3>${icon('settings','⚙️',22,22)} Preferences</h3><button class="mclose" id="mClose" aria-label="Close">✕</button></div>
-    <p class="sub" style="margin:0">Customize your app theme and text scaling.</p>
+    <p class="sub" style="margin:0">Customize your app theme.</p>
     <div class="mcard">
       <div class="mgrp">
         <b>Appearance Theme</b>
         <small>Choose between light, dark, or system mode.</small>
         <div class="seg">${themes.map(t => `<button data-theme="${t}" class="${S.theme===t?'on':''}">${t}</button>`).join('')}</div>
       </div>
-      <div class="mgrp">
-        <b>Font &amp; UI Scaling</b>
-        <small>Adjust widget padding and typography size.</small>
-        <div class="seg">${scales.map(sc => `<button data-scale="${sc}" class="${S.scale===sc?'on':''}">${sc}</button>`).join('')}</div>
-      </div>
+      
     </div>
   </div>`;
 }
@@ -563,8 +559,7 @@ $('#modal').onclick = e => {
   }
   const t = e.target.closest('[data-theme]');
   if (t) { S.theme = t.dataset.theme; localStorage.setItem('tmr_theme', S.theme); applyPrefs(); openSettings(); return; }
-  const sc = e.target.closest('[data-scale]');
-  if (sc) { S.scale = sc.dataset.scale; localStorage.setItem('tmr_scale', S.scale); applyPrefs(); openSettings(); return; }
+  
 };
 addEventListener('keydown', e => {
   if (e.key === 'Escape' && !$('#modal').hidden) {
