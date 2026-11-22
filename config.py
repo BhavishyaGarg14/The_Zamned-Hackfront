@@ -15,4 +15,5 @@ NEO4J_URI = os.getenv("NEO4J_URI")
 NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
 
+JWT_SECRET = os.getenv("JWT_SECRET", "dev-only-jwt-secret-key-change-in-prod-32b")
 CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "*").split(",") if o.strip()]
