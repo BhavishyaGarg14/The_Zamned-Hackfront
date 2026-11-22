@@ -5,3 +5,5 @@ google-genai
 tenacity
 neo4j
 python-multipart
+bcrypt
+PyJWT
