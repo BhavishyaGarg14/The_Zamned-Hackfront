@@ -97,10 +97,11 @@ Update your credentials inside `.env`:
 
 ```
 GEMINI_API_KEY=your_gemini_api_key_here
-NEO4J_URI=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=your_neo4j_password
-CORS_ORIGINS=["*"]
+GEMINI_MODEL=gemini-3.5-flash-lite
+NEO4J_URI=neo4j+ssc://xxxxxxxx.databases.neo4j.io
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=your_neo4j_password_here
+JWT_SECRET=32_or_more_character_key
 
 ```
 
