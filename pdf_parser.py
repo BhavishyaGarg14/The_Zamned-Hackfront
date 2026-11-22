@@ -1,11 +1,8 @@
-"""Extracts debit transactions from digital or scanned PDF bank statements via Gemini OCR."""
 import json
 import logging
 from datetime import date
-
 from google import genai
 from google.genai import types
-
 from config import GEMINI_API_KEY, GEMINI_MODEL
 
 log = logging.getLogger(__name__)
@@ -25,7 +22,6 @@ Rules:
 
 
 def extract_debits_from_pdf(pdf_bytes: bytes) -> list[dict]:
-    """Run Gemini multimodal OCR on PDF bytes and return validated debit rows."""
     if not GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY is missing.")
 
