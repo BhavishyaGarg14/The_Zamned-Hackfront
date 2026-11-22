@@ -16,13 +16,14 @@ import logging
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
+import os, tempfile
 
 from gemini_analyzer import get_commitments_from_gemini
 
 log = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).parent
-CACHE_FILE = BASE_DIR / "cache.json"
+CACHE_FILE = Path("/tmp/cache.json") if os.getenv("VERCEL") else BASE_DIR / "cache.json"
 SAMPLE_FILE = BASE_DIR / "sample_data.json"
 
 _lock = threading.RLock()  # RLock: a listener may call get_commitments() without deadlocking
@@ -53,7 +54,12 @@ def _try_gemini():
     if not fresh:
         return False
 
-    _set(fresh, getattr(get_commitments_from_gemini, "last_engine", "gemini"))
+    engine = getattr(get_commitments_from_gemini, "last_engine", "gemini")
+    _set(fresh, engine)
+    try:
+        CACHE_FILE.write_text(json.dumps(fresh, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
     CACHE_FILE.write_text(json.dumps(fresh, ensure_ascii=False), encoding="utf-8")
     for callback in _listeners:
         try:
