@@ -161,7 +161,7 @@ function icon(baseName, fallback, w, h, radius = 0) {
   const exts = ['.png', '.jpeg', '.jpg'];
   const names = isDark() ? [`${baseName}_dark`, baseName] : [baseName];
   const urls = names.flatMap(n => exts.map(ext => `/assets/${encodeURIComponent(n + ext)}`));
-  const style = `width:${w}px;height:${h}px;object-fit:contain${radius ? `;border-radius:${radius}px` : ''}`;
+  const style = `width:${w/16}rem;height:${h/16}rem;object-fit:contain${radius ? `;border-radius:${radius}px` : ''}`;
   return `<img src="${urls[0]}" alt="" style="${style}" data-fb="${esc(urls.slice(1).join('|'))}" data-txt="${esc(fallback)}" onerror="nextIcon(this)">`;
 }
 function nextIcon(img) {
@@ -356,12 +356,12 @@ function renderCharts(d){
         }
       },
       scales: {
-        x: { grid: { display: false }, ticks: { color: '#64748B', font: { size: 11 } } },
+        x: { grid: { display: false }, ticks: { color: '#64748B', font: {size: 11 * (parseInt(S.scale,10) / 100) } } },
         y: {
           beginAtZero: true,
           border: { display: false },
           grid: { color: '#F1F5F9' },
-          ticks: { color: '#64748B', font: { size: 11 }, callback: v => inr(v) }
+          ticks: { color: '#64748B', font: {aize: 11 * (parseInt(S.scale,10) / 100) }, callback: v => inr(v) }
         }
       }
     }
@@ -459,7 +459,7 @@ function detail(c){
     <div style="text-align:right"><div class="sub" style="margin:0">Annual cost</div><div class="big">${inr(annualCost(c))}</div></div></div>
   <div class="box"><b>Payment history</b><p class="sub" style="margin:4px 0 10px">Matched ${h.length} payment${h.length===1?'':'s'} for ${esc(c.name)} with a ${esc(c.frequency)} billing pattern.</p>
     ${h.map((x,i)=>`<div class="hist"><span style="color:var(--faint)">•</span><span class="d">${fmt(x.date)}</span><span class="t">${esc(x.description)}</span><b>${inr(x.amount)}</b>${i===h.length-1?'<span class="tag hi">Latest</span>':''}</div>`).join('')}</div>
-  <div class="box"><div class="kick">GUIDED CANCELLATION</div><h2 style="font-size:18px">How to stop this payment</h2>
+  <div class="box"><div class="kick">GUIDED CANCELLATION</div><h2 style="font-size:1.125rem">How to stop this payment</h2>
     ${c.payment_mechanism ? `<span class="pillgrey">✓  Payment mechanism: ${esc(c.payment_mechanism)}</span>` : ''}
     ${steps.map((s,i)=>`<div class="step"><b>${i+1}</b><span>${esc(s)}</span></div>`).join('')}
     <div class="warn" style="display:flex;gap:8px;align-items:flex-start">${icon('warning','⚠️',20,20)}<span>Important distinction: Revoking a mandate may stop future debits but does not automatically terminate the underlying merchant contract.</span></div>
